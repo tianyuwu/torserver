@@ -2,15 +2,21 @@
 # encoding: utf-8
 
 # 数据库配置
-DB_HOST = 'dbi.mshare.cn'
-DB_PORT = 1094
-DB_NAME = 'sxsdb'
-DB_USER = 'dbuser'
-DB_PASSWORD = 'dY8*6fN6Z#xSOg$wG9zDATTe'
+DB_HOST = 'postgre'
+DB_PORT = 3433
+DB_NAME = 'postgre'
+DB_USER = 'postgre'
+DB_PASSWORD = 'postgre`s password'
 
 # redis配置
 STORE_OPTIONS = {
-    'redis_host': 'dbi.mshare.cn',
+    'redis_host': 'redis',
     'redis_port': 1200,
-    'redis_pass': '255ZDVsni98AB4KBHd76pyAh',
+    'redis_pass': 'redis`s password',
 }
+
+
+try:
+    from local_settings import *
+except ImportError:
+    pass
