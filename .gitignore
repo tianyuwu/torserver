@@ -1,0 +1,5 @@
+.idea/
+log/
+__pycache__/
+*.py[cod]
+.local_settings.py

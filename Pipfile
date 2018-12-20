@@ -1,0 +1,23 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+aiopg = "==0.15.0"
+bcrypt = "==3.1.5"
+tornado = "==5.1.1"
+psycopg2 = "*"
+psycopg2-binary = "*"
+ujson = "*"
+asyncpg = "*"
+uvloop = "*"
+marshmallow = "*"
+webargs = "*"
+jwt = "*"
+aredis = "*"
+
+[requires]
+python_version = "3.7"
