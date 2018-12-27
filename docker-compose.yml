@@ -10,6 +10,8 @@ app:
   build: .
 #  links:
 #    - postgres
+  volumes:
+     - .:/usr/src/app
   ports:
     - "8888:8888"
 #  command: --db_host=postgres

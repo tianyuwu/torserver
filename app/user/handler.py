@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 from app.handler import BaseHandler
-from app.user.model import UsersModel
+
 from app.user.schema import UserLoginSchema
 from base.argparser import use_args
 from base.route import Route

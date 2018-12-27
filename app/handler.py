@@ -3,11 +3,15 @@
 import json
 
 import datetime
+
+import os
 import tornado.web
 from tornado.log import app_log
 
 from app.error_status import NOT_ERROR, GENERAL_ERROR, Msg
+from base.route import Route
 
+route = Route()
 
 class ComplexEncoder(json.JSONEncoder):
     """处理json化时时间格式的问题"""
@@ -41,6 +45,23 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def get_current_user(self):
         return self.identify.get("uuid") if self.identify else None
+
+    def get_param(self, argument, argument_default=None):
+        """获取请求参数"""
+        content_type = self.request.headers.get("Content-type")
+        if content_type and 'application/json' in content_type:
+            paramrs = self.request.body
+            if paramrs:
+                paramrs_dict = json.loads(paramrs)
+                _param = paramrs_dict.get(argument, argument_default)
+            else:
+                _param = argument_default
+        else:
+            _param = self.get_argument(argument, argument_default)
+            if not _param:
+                _param = argument_default
+
+        return _param
 
     def write_json(self, error=NOT_ERROR, data=None):
         """返回json数据时用，默认正常时状态为100
@@ -90,6 +111,17 @@ class BaseHandler(tornado.web.RequestHandler):
         else:
             self.write_json(status_code)
 
+@route('/')
+class HomeHandler(BaseHandler):
+
+    def get_template_path(self):
+        return os.path.join(os.path.dirname(__file__), "admin/dist")
+
+    def get(self):
+        self.render('index.html')
+
+
+@route('.*')
 class DefaultHandler(BaseHandler):
     def get(self):
         self.write_error(404)

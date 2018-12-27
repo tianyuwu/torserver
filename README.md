@@ -1,7 +1,8 @@
 # torserver-基于tornado的web开发工具包
-## todo
+## TODO
 - [ ] docker环境 
 - [ ] 文档自动化
+
 ## Python3环境搭建
 ### pipenv搭建
 安装pipenv

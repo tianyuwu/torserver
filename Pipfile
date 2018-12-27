@@ -18,6 +18,7 @@ marshmallow = "*"
 webargs = "*"
 jwt = "*"
 aredis = "*"
+click = "*"
 
 [requires]
 python_version = "3.7"

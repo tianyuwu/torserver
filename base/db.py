@@ -7,68 +7,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class NoResultError(object):
+class NoResultError(Exception):
     pass
 
 
-class AioPGMixin(object):
-    """
-    aiopg库的sql抽象类
-    """
-    def row_to_obj(self, row, cur):
-        """Convert a SQL row to an object supporting dict and attribute access."""
-        obj = tornado.util.ObjectDict()
-        for val, desc in zip(row, cur.description):
-            obj[desc.name] = val
-        return obj
-
-    async def execute(self, stmt, *args):
-        """Execute a SQL statement.
-
-        Must be called with ``await self.execute(...)``
-        """
-        with (await self.application.db.cursor()) as cur:
-            await cur.execute(stmt, args)
-
-    async def execute_select(self, stmt, *args):
-        """Query for a list of results.
-
-        Typical usage::
-
-            results = await self.query(...)
-
-        Or::
-
-            for row in await self.query(...)
-        """
-        with (await self.application.db_pool.cursor()) as cur:
-            await cur.execute(stmt, args)
-            return [self.row_to_obj(row, cur) for row in await cur.fetchall()]
-
-    async def execute_find(self, stmt, *args):
-        """Query for exactly one result.
-
-        Raises NoResultError if there are no results, or ValueError if
-        there are more than one.
-        """
-        results = await self.query(stmt, *args)
-        if len(results) == 0:
-            raise NoResultError()
-        elif len(results) > 1:
-            raise ValueError("Expected 1 result, got %d" % len(results))
-        return results[0]
-
-
-class AsyncPG(object):
-    """
-    asyncpg的sql抽象类
-    """
-    def __init__(self, db):
+class DB(object):
+    def __init__(self, db, placeholder=None):
         self.db = db
+        self.placeholder = placeholder
+
+    async def execute(self, *args):
+        """
+        执行sql
+        :param args:
+        :return:
+        """
+        pass
+
+    async def execute_find(self, *args):
+        """执行查询单条记录的sql"""
+        pass
+
+    async def execute_select(self, *args):
+        """执行查询多条记录的sql"""
+        pass
 
     async def find(self, table, fields='*', condition=None, params=None):
         """查询单条"""
-        where_str, _params = self.__conditions(condition)
+        where_str, _params = self.conditions(condition)
         if not params:
             params = _params
         select_str = "SELECT {0} FROM {1} ".format(fields, table)
@@ -77,23 +43,23 @@ class AsyncPG(object):
         return rs
 
     async def select(self, table, fields='*', condition=None, order=None, offset=0,
-               limit=0, params=None):
+                     limit=0, params=None):
         """查询多条"""
-        where_str, _params = self.__conditions(condition)
+        where_str, _params = self.conditions(condition)
         if not params:
             params = _params
 
-        order_str = self.__order_str(order)
-        limit_str = self.__limit_str(offset, limit)
+        order_str = self.order_str(order)
+        limit_str = self.limit_str(offset, limit)
 
         select_str = "SELECT {0} FROM {1} {2} {3} {4}". \
-                format(fields, table, where_str, order_str, limit_str)
+            format(fields, table, where_str, order_str, limit_str)
         rs = await self.execute_select(select_str, *params)
         return rs
 
     async def count(self, table, condition=None, params=None):
         """统计条数"""
-        where_str, _params = self.__conditions(condition)
+        where_str, _params = self.conditions(condition)
         if not params:
             params = _params
         count_str = "SELECT count(1) as num FROM {0} {1}".format(table, where_str)
@@ -128,7 +94,7 @@ class AsyncPG(object):
         :return: True or False
         """
         sql_str = "INSERT INTO {0}".format(table)
-        insert_str, params = self.__get_insert_str(data_dict)
+        insert_str, params = self.get_insert_str(data_dict)
         if not return_id:
             res = await self.execute(sql_str + insert_str, *params)
         else:
@@ -146,8 +112,8 @@ class AsyncPG(object):
         :param params: 传入的参数(list格式)，仅当字符串传入时候需要
         :return: True or False
         """
-        update_str, _params = self.__get_update_str(data_dict)
-        condition_str, _params1 = self.__conditions(condition)
+        update_str, _params = self.get_update_str(data_dict)
+        condition_str, _params1 = self.conditions(condition)
         if not params:
             _params.extend(_params1)
             params = _params
@@ -156,44 +122,20 @@ class AsyncPG(object):
         res = await self.execute(sql_str, *params)
         return res
 
-    async def execute_select(self, sql, *args, size=None):
-        async with self.db.acquire() as con:
-            try:
-                rs = [dict(row) for row in await con.fetch(sql, *args)]
-                logger.info(self._print_sql(sql, args) + '\n\nResult: rows returned {}'.format(len(rs)))
-            except Exception as e:
-                logger.error(self._print_sql(sql, args) + '\n\nError: {}'.format(e.message))
-                rs = None
-            return rs
-
-    async def execute_find(self, sql, *args):
-        async with self.db.acquire() as con:
-            try:
-                rs = await con.fetchrow(sql, *args)
-                logger.info(self._print_sql(sql, args) + '\n\nResult: rows returned {}'.format(1 if rs else 0))
-            except Exception as e:
-                rs = None
-                logger.error(self._print_sql(sql, args) + '\n\nError: {}'.format(e.message))
-
-            return dict(rs) if rs else rs
-
-    async def execute(self, sql, *args, autocommit=True):
-        logger.info(self._print_sql(sql, args))
-        async with self.db.acquire() as con:
-            rs = await con.execute(sql, *args)
-            return rs
-
-    def _print_sql(self, sql, args=()):
-        sql = re.sub(r'\$(\d+)', '%s', sql)
+    def print_sql(self, sql, args=()):
+        sql = re.sub(r'%s', "'%s'", sql)
         out_sql = sql % tuple(args)
-        return 'Execute SQL:\n{}'.format(out_sql)
 
-    def __conditions(self, condition):
+        return 'Execute SQL:\n{}'.format(out_sql)
+        # return sql
+
+    def conditions(self, condition):
         """
         查询条件，支持两种方式，字典和字符串，字符串需要用到单引号
         eg： "nick_name='Whitney'
                 or
             {"nick_name":"Whitney"}
+        :placeholder 占位符 %s or $n
         :return 返回sql片段和参数
         """
         condition_sql = ''
@@ -204,10 +146,23 @@ class AsyncPG(object):
             l = []
             params = []
             # preserve old behavior
-            for index, (k, v) in enumerate(query):
-                if v:
-                    l.append("{0}=${1}".format(k, index + 1))
-                    params.append(v)
+            if self.placeholder == '$n':
+                for index, (k, v) in enumerate(query):
+                    if v:
+                        # 模糊搜索的支持
+                        l.append("{0}=${1}".format(k, index + 1) \
+                                 if k[0]!='~' else "{0} ~ {1}".format(k[1:], index+1))
+                        params.append(v)
+            else:
+                for k, v in query:
+                    if v:
+                        # 模糊搜索支持
+                        if v[0] in ['~','～']:
+                            l.append("{0} ~ %s".format(k))
+                            params.append(v[1:])
+                        else:
+                            l.append("{0}=%s".format(k))
+                            params.append(v)
 
             if len(l):
                 condition_sql = "where " + ' AND '.join(l)
@@ -219,7 +174,7 @@ class AsyncPG(object):
 
         return condition_sql, params
 
-    def __get_insert_str(self, data_dict):
+    def get_insert_str(self, data_dict):
         """
         组合插入的sql
         """
@@ -231,10 +186,16 @@ class AsyncPG(object):
             fields = []
             values = []
             # preserve old behavior
-            for index, (k, v) in enumerate(query):
-                fields.append(k)
-                values.append('${}'.format(index + 1))
-                params.append(v)
+            if self.placeholder == '$n':
+                for index, (k, v) in enumerate(query):
+                    fields.append(k)
+                    values.append('${}'.format(index + 1))
+                    params.append(v)
+            else:
+                for k, v in query:
+                    fields.append(k)
+                    values.append('%s')
+                    params.append(v)
 
             fields_str = ','.join(fields)
             values_str = ",".join(values)
@@ -245,20 +206,26 @@ class AsyncPG(object):
 
         return sql_str, params
 
-    def __get_update_str(self, data_dict):
+    def get_update_str(self, data_dict):
         if hasattr(data_dict, "items"):
             l = []
             args = []
-            for index, (k, v) in enumerate(data_dict.items()):
-                l.append("{0}=${1}".format(k, index + 1))
-                args.append(v)
+            if self.placeholder == '$n':
+                for index, (k, v) in enumerate(data_dict.items()):
+                    l.append("{0}=${1}".format(k, index + 1))
+                    args.append(v)
+            else:
+                for k, v in data_dict.items():
+                    l.append("{0}=%s".format(k))
+                    args.append(v)
+
             if len(l):
                 sql_str = ",".join(l)
             else:
                 sql_str = ''
             return sql_str, args
 
-    def __limit_str(self, offset, limit):
+    def limit_str(self, offset, limit):
         """
         组合sql中的limit部分
         :param offset:
@@ -270,7 +237,7 @@ class AsyncPG(object):
             limit_str = "OFFSET {} LIMIT {}".format(offset, limit)
         return limit_str
 
-    def __order_str(self, order_list):
+    def order_str(self, order_list):
         """
         组合sql中的排序部分
         :param order_list:
@@ -281,4 +248,109 @@ class AsyncPG(object):
 
         return ' ORDER BY ' + ','.join(
             map(lambda x: x[1:] + ' DESC' if x[0] == '-' else x + ' ASC', order_list))
+
+class AioPG(DB):
+    """
+    aiopg库的sql抽象类
+    """
+    def __init__(self, db):
+        super(AioPG, self).__init__(db)
+
+    def row_to_obj(self, row, cur):
+        """Convert a SQL row to an object supporting dict and attribute access."""
+        obj = tornado.util.ObjectDict()
+        for val, desc in zip(row, cur.description):
+            obj[desc.name] = val
+        return obj
+
+    async def execute(self, stmt, *args):
+        """Execute a SQL statement.
+
+        Must be called with ``await self.execute(...)``
+        """
+        with (await self.db.cursor()) as cur:
+            try:
+                await cur.execute(stmt, args)
+                rs = True
+                logger.info(self.print_sql(stmt, args))
+            except Exception as e:
+                rs = False
+                logger.error(self.print_sql(stmt, args) + '\nError: {}'.format(e))
+            return rs
+
+
+
+    async def execute_select(self, stmt, *args):
+        """Query for a list of results.
+
+        Typical usage::
+
+            results = await self.execute_select(...)
+
+        Or::
+
+            for row in await self.execute_select(...)
+        """
+        with (await self.db.cursor()) as cur:
+            try:
+                await cur.execute(stmt, args)
+                rs =  [self.row_to_obj(row, cur) for row in await cur.fetchall()]
+                logger.info(self.print_sql(stmt, args) + '\n\nResult: rows returned {}'.format(len(rs)))
+            except Exception as e:
+                logger.error(self.print_sql(stmt, args) + '\nError: {}'.format(e))
+                rs = None
+            return rs
+
+    async def execute_find(self, stmt, *args):
+        """Query for exactly one result.
+
+        Raises NoResultError if there are no results, or ValueError if
+        there are more than one.
+        """
+        with (await self.db.cursor()) as cur:
+            try:
+                await cur.execute(stmt, args)
+                rs =  await cur.fetchone()
+                rs = self.row_to_obj(rs, cur)
+                logger.info(self.print_sql(stmt, args) + '\n\nResult: rows returned {}'.format(1 if rs else 0))
+            except Exception as e:
+                logger.error(self.print_sql(stmt, args) + '\nError: {}'.format(e))
+                rs = None
+            return rs
+
+
+class AsyncPG(DB):
+    """
+    asyncpg的sql抽象类
+    """
+    def __init__(self, db):
+        super(AsyncPG, self).__init__(db, '$n')
+
+
+    async def execute_select(self, sql, *args, size=None):
+        async with self.db.acquire() as con:
+            try:
+                rs = [dict(row) for row in await con.fetch(sql, *args)]
+                logger.info(self.print_sql(sql, args) + '\n\nResult: rows returned {}'.format(len(rs)))
+            except Exception as e:
+                logger.error(self.print_sql(sql, args) + '\n\nError: {}'.format(e.message))
+                rs = None
+            return rs
+
+    async def execute_find(self, sql, *args):
+        async with self.db.acquire() as con:
+            try:
+                rs = await con.fetchrow(sql, *args)
+                logger.info(self.print_sql(sql, args) + '\nResult: rows returned {}'.format(1 if rs else 0))
+            except Exception as e:
+                rs = None
+                logger.error(self.print_sql(sql, args) + '\nError: {}'.format(e.message))
+
+            return dict(rs) if rs else rs
+
+    async def execute(self, sql, *args, autocommit=True):
+        logger.info(self.print_sql(sql, args))
+        async with self.db.acquire() as con:
+            rs = await con.execute(sql, *args)
+            return rs
 

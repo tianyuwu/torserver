@@ -6,14 +6,12 @@ from app.schema import BaseSchema
 
 
 class UserLoginSchema(BaseSchema):
-    username = fields.Str(required=True,
+    email = fields.Str(required=True,
                           validate=validate.Regexp('^[1]\d{10}$|[^\._-][\w\.-]+@(?:[A-Za-z0-9]+\.)+[A-Za-z]+$'),
                           description='邮箱或者手机号')
     password = fields.Str(required=True,
-                          validate=validate.Length(min=6, max=20),
+                          validate=validate.Length(min=6, max=18),
                           description='用户的密码')
-    # 前端不传递该参数时后端依然能获取到，值为missing的值
-    remember = fields.Bool(required=False, missing=False, description='是否记住登录状态')
 
     # 自定义验证规则
     # @validates('location')
